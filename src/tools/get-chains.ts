@@ -1,14 +1,12 @@
-import type { Config } from "@wagmi/core";
 import type { FastMCP } from "fastmcp";
-import { getChains } from "@wagmi/core";
 import { z } from "zod";
 import { JSONStringify } from "../utils/json-stringify";
 import { createBridgeClient } from "../wagmi-config";
 
-export function registerGetChainsTools(server: FastMCP, wagmiConfig: Config): void {
+export function registerGetChainsTools(server: FastMCP): void {
   server.addTool({
     name: "get-chains",
-    description: "Get the configured chains.",
+    description: "Get the chains configured in MetaMask (both default and custom networks).",
     parameters: z.object({}),
     execute: async () => {
       try {
@@ -30,37 +28,49 @@ export function registerGetChainsTools(server: FastMCP, wagmiConfig: Config): vo
               console.warn("Could not get permissions:", error);
             }
             
+            // Get the current chain information
+            const currentChainIdInt = parseInt(currentChainId, 16);
+            
+            // Try to get more detailed network information from MetaMask
+            let networkDetails = null;
+            try {
+              // Get network name and other details if available
+              const networkName = await bridgeClient.request("net_version", []);
+              networkDetails = {
+                chainId: currentChainIdInt,
+                chainIdHex: currentChainId,
+                networkId: parseInt(networkName, 10),
+                networkName: networkName
+              };
+            } catch (error) {
+              console.warn("Could not get network details:", error);
+              networkDetails = {
+                chainId: currentChainIdInt,
+                chainIdHex: currentChainId,
+                networkId: currentChainIdInt,
+                networkName: currentChainIdInt.toString()
+              };
+            }
+            
+            // Create a comprehensive result with current chain info
+            const currentChain = {
+              id: currentChainIdInt,
+              name: `MetaMask Network (ID: ${currentChainIdInt})`,
+              isCurrent: true,
+              chainIdHex: currentChainId,
+              networkDetails: networkDetails,
+              isConnected: accounts.length > 0
+            };
+            
             bridgeClient.disconnect();
             
-            // Get configured chains from wagmi
-            const configuredChains = getChains(wagmiConfig);
-            
-            // Create a comprehensive chain list
             const result = {
-              currentChainId: parseInt(currentChainId, 16),
-              currentChainIdHex: currentChainId,
+              currentChain: currentChain,
               accounts: accounts,
               permissions: permissions,
-              configuredChains: configuredChains.map(chain => ({
-                id: chain.id,
-                name: chain.name,
-                network: chain.network,
-                nativeCurrency: chain.nativeCurrency,
-                rpcUrls: chain.rpcUrls,
-                blockExplorers: chain.blockExplorers,
-                testnet: chain.testnet,
-              })),
-              // Add some common chains that might be in MetaMask but not in wagmi config
-              commonChains: [
-                { id: 1, name: "Ethereum Mainnet", network: "homestead", testnet: false },
-                { id: 11155111, name: "Sepolia", network: "sepolia", testnet: true },
-                { id: 137, name: "Polygon", network: "matic", testnet: false },
-                { id: 56, name: "BNB Smart Chain", network: "bsc", testnet: false },
-                { id: 42161, name: "Arbitrum One", network: "arbitrum", testnet: false },
-                { id: 10, name: "Optimism", network: "optimism", testnet: false },
-                { id: 250, name: "Fantom", network: "fantom", testnet: false },
-                { id: 43114, name: "Avalanche", network: "avalanche", testnet: false },
-              ]
+              note: "This shows the current active network in MetaMask. MetaMask doesn't expose an API to list all configured networks. To see other networks, use the switch-chain tool to switch to them first, then call get-chains again.",
+              limitation: "MetaMask API limitation: Cannot enumerate all configured networks without switching to each one individually.",
+              suggestion: "Use switch-chain tool to switch to different networks, then call get-chains again to see each network's details."
             };
             
             return {
@@ -72,30 +82,27 @@ export function registerGetChainsTools(server: FastMCP, wagmiConfig: Config): vo
               ],
             };
           } catch (error) {
-            console.warn("Bridge request failed, falling back to wagmi:", error);
+            console.warn("Bridge request failed:", error);
             if (bridgeClient) {
               bridgeClient.disconnect();
             }
           }
         }
         
-        // Fallback to wagmi only
-        const result = getChains(wagmiConfig);
+        // Fallback when bridge is not available
         return {
           content: [
             {
               type: "text",
               text: JSONStringify({
-                configuredChains: result.map(chain => ({
-                  id: chain.id,
-                  name: chain.name,
-                  network: chain.network,
-                  nativeCurrency: chain.nativeCurrency,
-                  rpcUrls: chain.rpcUrls,
-                  blockExplorers: chain.blockExplorers,
-                  testnet: chain.testnet,
-                })),
-                note: "Using configured chains only. Connect to bridge to get MetaMask chains."
+                error: "Bridge not available",
+                message: "MetaMask bridge is not connected. Please start the bridge server and connect to MetaMask to see network information.",
+                instructions: [
+                  "1. Start the bridge: node secure-bridge.js",
+                  "2. Open relay tab: http://127.0.0.1:8546",
+                  "3. Connect MetaMask in the relay tab",
+                  "4. Try get-chains again"
+                ]
               }),
             },
           ],
@@ -107,15 +114,7 @@ export function registerGetChainsTools(server: FastMCP, wagmiConfig: Config): vo
               type: "text",
               text: JSONStringify({
                 error: (error as Error).message,
-                configuredChains: getChains(wagmiConfig).map(chain => ({
-                  id: chain.id,
-                  name: chain.name,
-                  network: chain.network,
-                  nativeCurrency: chain.nativeCurrency,
-                  rpcUrls: chain.rpcUrls,
-                  blockExplorers: chain.blockExplorers,
-                  testnet: chain.testnet,
-                })),
+                message: "Failed to get chain information from MetaMask"
               }),
             },
           ],

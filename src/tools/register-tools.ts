@@ -43,7 +43,7 @@ export function registerTools(server: FastMCP, wagmiConfig: Config) {
   registerGetBlockNumberTools(server, wagmiConfig);
   registerGetBlockTools(server, wagmiConfig);
   registerGetChainIdTools(server, wagmiConfig);
-  registerGetChainsTools(server, wagmiConfig);
+  registerGetChainsTools(server);
   registerGetENSAddressTools(server, wagmiConfig);
   registerGetENSNameTools(server, wagmiConfig);
   registerGetGasPriceTools(server, wagmiConfig);

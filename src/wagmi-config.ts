@@ -1,54 +1,7 @@
 import { createConfig, createStorage, http } from "@wagmi/core";
 import { mainnet, sepolia } from "@wagmi/core/chains";
-import { createClient, defineChain } from "viem";
+import { createClient } from "viem";
 import { MetaMaskBridgeClient } from "./bridge-client";
-
-// Define Zilliqa chains
-const zilliqaTestnet = defineChain({
-  id: 33101,
-  name: "Zilliqa Testnet",
-  network: "zilliqa-testnet",
-  nativeCurrency: {
-    decimals: 12,
-    name: "Zilliqa",
-    symbol: "ZIL",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://dev-api.zilliqa.com"],
-    },
-    public: {
-      http: ["https://dev-api.zilliqa.com"],
-    },
-  },
-  blockExplorers: {
-    default: { name: "Zilliqa Testnet Explorer", url: "https://dev-explorer.zilliqa.com" },
-  },
-  testnet: true,
-});
-
-const zilliqaMainnet = defineChain({
-  id: 1,
-  name: "Zilliqa Mainnet",
-  network: "zilliqa-mainnet",
-  nativeCurrency: {
-    decimals: 12,
-    name: "Zilliqa",
-    symbol: "ZIL",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://api.zilliqa.com"],
-    },
-    public: {
-      http: ["https://api.zilliqa.com"],
-    },
-  },
-  blockExplorers: {
-    default: { name: "Zilliqa Explorer", url: "https://explorer.zilliqa.com" },
-  },
-  testnet: false,
-});
 
 export async function createWagmiConfig() {
   // Simple file-based storage for wagmi
@@ -64,8 +17,9 @@ export async function createWagmiConfig() {
     },
   };
 
+  // Use only standard chains - MetaMask networks are handled via bridge
   return createConfig({
-    chains: [mainnet, sepolia, zilliqaTestnet, zilliqaMainnet],
+    chains: [mainnet, sepolia], // Only include standard chains
     ssr: true,
     storage: createStorage({ storage }),
     client({ chain }) {

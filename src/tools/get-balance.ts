@@ -30,10 +30,28 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
             const balanceWei = BigInt(balanceHex);
             
             // Determine correct decimals based on chain
+            // Try to get chain info from MetaMask first
             let decimals = 18; // Default to Ethereum decimals
-            if (chainId === 33101 || chainId === 1) {
-              // Zilliqa chains use 12 decimals
-              decimals = 12;
+            let symbol = "ETH"; // Default symbol
+            
+            // Known chain configurations (can be extended)
+            const chainConfigs: Record<number, { decimals: number; symbol: string; name: string }> = {
+              1: { decimals: 18, symbol: "ETH", name: "Ethereum Mainnet" },
+              11155111: { decimals: 18, symbol: "ETH", name: "Sepolia" },
+              137: { decimals: 18, symbol: "MATIC", name: "Polygon" },
+              56: { decimals: 18, symbol: "BNB", name: "BNB Smart Chain" },
+              42161: { decimals: 18, symbol: "ETH", name: "Arbitrum One" },
+              10: { decimals: 18, symbol: "ETH", name: "Optimism" },
+              250: { decimals: 18, symbol: "FTM", name: "Fantom" },
+              43114: { decimals: 18, symbol: "AVAX", name: "Avalanche" },
+              33101: { decimals: 12, symbol: "ZIL", name: "Zilliqa Testnet" },
+              // Note: Zilliqa Mainnet uses chain ID 1, same as Ethereum, but different network
+            };
+            
+            const config = chainConfigs[chainId];
+            if (config) {
+              decimals = config.decimals;
+              symbol = config.symbol;
             }
             
             // Format balance with correct decimals
@@ -51,7 +69,7 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
                     balanceWei: balanceWei.toString(),
                     decimals: decimals,
                     chainId: chainId,
-                    symbol: chainId === 33101 || chainId === 1 ? "ZIL" : "ETH"
+                    symbol: symbol
                   }),
                 },
               ],
@@ -140,7 +158,7 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
                     balanceWei: balanceWei.toString(),
                     decimals: decimals,
                     chainId: chainId,
-                    symbol: chainId === 33101 || chainId === 1 ? "ZIL" : "ETH"
+                    symbol: symbol
                   }),
                 },
               ],
