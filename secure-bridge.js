@@ -4,9 +4,11 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import crypto from "crypto";
 import { createServer } from "http";
+import { readFileSync, writeFileSync } from "fs";
 
 const PORT = 8546;
 const TOKEN = crypto.randomBytes(32).toString("hex"); // session token
+const CONFIG_PATH = "bridge-config.json";
 const ALLOWED_METHODS = [
   "personal_sign",
   "eth_sendTransaction", 
@@ -23,9 +25,41 @@ const ALLOWED_METHODS = [
   "wallet_addEthereumChain"
 ];
 
+// Function to update bridge config file
+function updateBridgeConfig(token) {
+  try {
+    // Read current config or create default
+    let config;
+    try {
+      config = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    } catch (error) {
+      // Create default config if file doesn't exist
+      config = {
+        "token": "default-token",
+        "bridgeUrl": "ws://127.0.0.1:8546",
+        "enabled": true
+      };
+    }
+
+    // Update token
+    config.token = token;
+
+    // Write updated config
+    writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    
+    console.log("✅ Bridge config updated automatically");
+    console.log(`   Config file: ${CONFIG_PATH}`);
+  } catch (error) {
+    console.warn("⚠️  Warning: Could not update bridge config:", error.message);
+  }
+}
+
 console.log("== MetaMask Secure Bridge ==");
 console.log("Auth token:", TOKEN);
 console.log("Allowed methods:", ALLOWED_METHODS.join(", "));
+
+// Update the config file with the new token
+updateBridgeConfig(TOKEN);
 
 const app = express();
 const server = createServer(app);

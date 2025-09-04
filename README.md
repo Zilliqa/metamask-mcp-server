@@ -44,12 +44,39 @@ Follow the guide https://modelcontextprotocol.io/quickstart/user and add the fol
     "metamask": {
       "command": "node",
       "args": [
-        "/PATH/TO/YOUR_PROJECT/dist/index.ts"
+        "/PATH/TO/YOUR_PROJECT/dist/index.js"
       ]
     }
   }
 }
 ```
+
+## Connecting to MetaMask
+
+### Option 1: QR Code Connection (Mobile)
+
+1. Use the `get-connect-uri` tool to get a connection URI
+2. Use the `show-connect-qrcode` tool to display a QR code
+3. Scan the QR code with your MetaMask mobile app
+
+### Option 2: Secure Bridge Connection (Browser Extension)
+
+For browser extensions, use the secure WebSocket bridge:
+
+1. **Start the bridge server**:
+   ```bash
+   node secure-bridge.js
+   ```
+   The bridge automatically updates the configuration file with the authentication token.
+
+2. **Open the relay tab**:
+   - Go to: `http://127.0.0.1:8546`
+   - Connect MetaMask when prompted
+   - Keep this tab open
+
+3. **Use your MCP server**:
+   - All MCP tools will now work with MetaMask via the bridge
+   - Try using the `get-account` tool to verify the connection
 
 ## Tools
 
