@@ -1,32 +1,114 @@
 import type { Config } from "@wagmi/core";
 import type { FastMCP } from "fastmcp";
 import { estimateGas } from "@wagmi/core";
-import { Address } from "abitype/zod";
 import { TransactionExecutionError } from "viem";
 import { z } from "zod";
 import { JSONStringify } from "../utils/json-stringify";
+import { createBridgeClient } from "../wagmi-config";
 
 export function registerEstimateGasTools(server: FastMCP, wagmiConfig: Config): void {
   server.addTool({
     name: "estimate-gas",
     description: "Estimate the gas necessary to complete a transaction without submitting it to the network.",
     parameters: z.object({
-      to: Address.describe("The transaction recipient or contract address."),
-      data: Address.optional().describe("A contract hashed method call with encoded args."),
-      value: z.coerce.bigint().optional().describe("Value in wei sent with this transaction."),
-      maxFeePerGas: z.coerce.bigint().optional().describe("Total fee per gas in wei, inclusive of maxPriorityFeePerGas."),
-      maxPriorityFeePerGas: z.coerce.bigint().optional().describe("Max priority fee per gas in wei."),
+      to: z.string().describe("The transaction recipient or contract address."),
+      data: z.string().describe("A contract hashed method call with encoded args (use '0x' for no data)."),
+      value: z.string().describe("Value in wei sent with this transaction (use '0' for no value)."),
+      maxFeePerGas: z.string().optional().describe("Total fee per gas in wei, inclusive of maxPriorityFeePerGas."),
+      maxPriorityFeePerGas: z.string().optional().describe("Max priority fee per gas in wei."),
       chainId: z.coerce.number().optional().describe("Chain ID to validate against before sending transaction."),
     }),
     execute: async (args) => {
       try {
-        const result = await estimateGas(wagmiConfig, args);
+        // Try bridge first if available
+        const bridgeClient = createBridgeClient();
+        if (bridgeClient) {
+          try {
+            await bridgeClient.connect();
+            
+            const gasArgs: any = {
+              to: args.to,
+            };
+            
+            // Handle data parameter (use '0x' for no data)
+            if (args.data && args.data !== '0x') {
+              gasArgs.data = args.data;
+            }
+            
+            // Handle value parameter (use '0' for no value)
+            if (args.value && args.value !== '0') {
+              gasArgs.value = args.value; // Keep as string for bridge
+            }
+            
+            // Handle optional gas parameters
+            if (args.maxFeePerGas) {
+              gasArgs.maxFeePerGas = args.maxFeePerGas; // Keep as string for bridge
+            }
+            
+            if (args.maxPriorityFeePerGas) {
+              gasArgs.maxPriorityFeePerGas = args.maxPriorityFeePerGas; // Keep as string for bridge
+            }
+            
+            if (args.chainId) {
+              gasArgs.chainId = args.chainId;
+            }
+            
+            const result = await bridgeClient.estimateGas(gasArgs);
+            bridgeClient.disconnect();
+            
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSONStringify({
+                    gas: result,
+                  }),
+                },
+              ],
+            };
+          } catch (error) {
+            console.warn("Bridge request failed, falling back to wagmi:", error);
+            if (bridgeClient) {
+              bridgeClient.disconnect();
+            }
+          }
+        }
+        
+        // Fallback to wagmi
+        const gasArgs: any = {
+          to: args.to,
+        };
+        
+        // Handle data parameter (use '0x' for no data)
+        if (args.data && args.data !== '0x') {
+          gasArgs.data = args.data;
+        }
+        
+        // Handle value parameter (use '0' for no value)
+        if (args.value && args.value !== '0') {
+          gasArgs.value = BigInt(args.value);
+        }
+        
+        // Handle optional gas parameters
+        if (args.maxFeePerGas) {
+          gasArgs.maxFeePerGas = BigInt(args.maxFeePerGas);
+        }
+        
+        if (args.maxPriorityFeePerGas) {
+          gasArgs.maxPriorityFeePerGas = BigInt(args.maxPriorityFeePerGas);
+        }
+        
+        if (args.chainId) {
+          gasArgs.chainId = args.chainId;
+        }
+        
+        const result = await estimateGas(wagmiConfig, gasArgs);
         return {
           content: [
             {
               type: "text",
               text: JSONStringify({
-                hash: result,
+                gas: result.toString(),
               }),
             },
           ],

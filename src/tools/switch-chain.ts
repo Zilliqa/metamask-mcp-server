@@ -3,6 +3,7 @@ import type { FastMCP } from "fastmcp";
 import { switchChain } from "@wagmi/core";
 import { z } from "zod";
 import { JSONStringify } from "../utils/json-stringify";
+import { createBridgeClient } from "../wagmi-config";
 
 export function registerSwitchChainTools(server: FastMCP, wagmiConfig: Config): void {
   server.addTool({
@@ -23,24 +24,70 @@ export function registerSwitchChainTools(server: FastMCP, wagmiConfig: Config): 
       }).optional().describe("Add not configured chains to Ethereum wallets."),
     }),
     execute: async (args) => {
-      const chainId = args.chainId as typeof wagmiConfig["chains"][number]["id"];
-      const addEthereumChainParameter = args.addEthereumChainParameter;
+      try {
+        // Try bridge first if available
+        const bridgeClient = createBridgeClient();
+        if (bridgeClient) {
+          try {
+            await bridgeClient.connect();
+            
+            // Switch chain via bridge
+            const chainIdHex = `0x${args.chainId.toString(16)}`;
+            const result = await bridgeClient.switchEthereumChain(chainIdHex);
+            bridgeClient.disconnect();
+            
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSONStringify({
+                    success: true,
+                    chainId: args.chainId,
+                    message: "Chain switched successfully via bridge",
+                  }),
+                },
+              ],
+            };
+          } catch (error) {
+            console.warn("Bridge request failed, falling back to wagmi:", error);
+            if (bridgeClient) {
+              bridgeClient.disconnect();
+            }
+          }
+        }
+        
+        // Fallback to wagmi
+        const chainId = args.chainId as typeof wagmiConfig["chains"][number]["id"];
+        const addEthereumChainParameter = args.addEthereumChainParameter;
 
-      const result = await switchChain(wagmiConfig, {
-        chainId,
-        addEthereumChainParameter,
-      });
+        const result = await switchChain(wagmiConfig, {
+          chainId,
+          addEthereumChainParameter,
+        });
 
-      wagmiConfig._internal.chains.setState(x => [...x, result]);
+        wagmiConfig._internal.chains.setState(x => [...x, result]);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSONStringify(result),
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSONStringify(result),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSONStringify({
+                success: false,
+                error: (error as Error).message,
+              }),
+            },
+          ],
+        };
+      }
     },
   });
 };

@@ -16,6 +16,7 @@ import {
   registerGetChainsTools,
   registerGetENSAddressTools,
   registerGetENSNameTools,
+  registerGetGasPriceTools,
   registerGetTokenTools,
   registerGetTransactionReceiptTools,
   registerGetTransactionTools,
@@ -45,6 +46,7 @@ export function registerTools(server: FastMCP, wagmiConfig: Config) {
   registerGetChainsTools(server, wagmiConfig);
   registerGetENSAddressTools(server, wagmiConfig);
   registerGetENSNameTools(server, wagmiConfig);
+  registerGetGasPriceTools(server, wagmiConfig);
   registerGetTokenTools(server, wagmiConfig);
   registerGetTransactionReceiptTools(server, wagmiConfig);
   registerGetTransactionTools(server, wagmiConfig);
