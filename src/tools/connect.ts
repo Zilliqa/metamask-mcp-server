@@ -107,37 +107,6 @@ export function registerConnectTools(server: FastMCP, wagmiConfig: Config): void
   });
 }
 
-async function connectToMetaMaskExtension(log: any, wagmiConfig: Config) {
-  return new Promise((resolve, reject) => {
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined') {
-      reject(new Error("Browser extension connection requires a browser environment. This MCP server is running in a headless environment."));
-      return;
-    }
-
-    // Check if MetaMask is installed
-    if (!window.ethereum || !window.ethereum.isMetaMask) {
-      reject(new Error("MetaMask extension not found. Please install MetaMask browser extension."));
-      return;
-    }
-
-    // Use the browser's ethereum provider directly
-    window.ethereum.request({ method: 'eth_requestAccounts' })
-      .then((accounts: string[]) => {
-        log.debug("Extension connect success!", accounts);
-        resolve(accounts);
-      })
-      .catch((error: any) => {
-        log.error("Extension connect error:", error);
-        if (error.code === 4001) {
-          reject(new Error("User rejected the connection request"));
-        } else {
-          reject(error);
-        }
-      });
-  });
-}
-
 async function getMetaMaskConnectURI(log: any, wagmiConfig: Config, options?: MetaMaskParameters) {
   return new Promise((resolve, reject) => {
     const connectorFn = metaMask({
