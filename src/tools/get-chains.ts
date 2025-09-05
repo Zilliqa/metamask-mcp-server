@@ -96,10 +96,10 @@ export function registerGetChainsTools(server: FastMCP): void {
               type: "text",
               text: JSONStringify({
                 error: "Bridge not available",
-                message: "MetaMask bridge is not connected. Please start the bridge server and connect to MetaMask to see network information.",
+                message: "MetaMask bridge is not connected. Please use the connect-extension tool to start the bridge and connect to MetaMask.",
                 instructions: [
-                  "1. Start the bridge: node secure-bridge.js",
-                  "2. Open relay tab: http://127.0.0.1:8546",
+                  "1. Use the connect-extension tool to start the bridge automatically",
+                  "2. Open the relay tab URL provided by the tool",
                   "3. Connect MetaMask in the relay tab",
                   "4. Try get-chains again"
                 ]

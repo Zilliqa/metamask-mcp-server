@@ -59,23 +59,23 @@ Follow the guide https://modelcontextprotocol.io/quickstart/user and add the fol
 2. Use the `show-connect-qrcode` tool to display a QR code
 3. Scan the QR code with your MetaMask mobile app
 
-### Option 2: Secure Bridge Connection (Browser Extension)
+### Option 2: Automatic Bridge Connection (Browser Extension)
 
-For browser extensions, use the secure WebSocket bridge:
+For browser extensions, the bridge server starts automatically:
 
-1. **Start the bridge server**:
-   ```bash
-   node secure-bridge.js
-   ```
-   The bridge automatically updates the configuration file with the authentication token.
+1. **Use the connect-extension tool**:
+   - The bridge server starts automatically when you call `connect-extension`
+   - The relay tab opens automatically in your browser
+   - No manual setup required
 
-2. **Open the relay tab**:
-   - Go to: `http://127.0.0.1:8546`
+2. **Connect MetaMask**:
+   - The relay tab should open automatically at `http://127.0.0.1:8546`
    - Connect MetaMask when prompted
    - Keep this tab open
 
 3. **Use your MCP server**:
    - All MCP tools will now work with MetaMask via the bridge
+   - The bridge server runs automatically in the background
    - Try using the `get-account` tool to verify the connection
 
 ## Tools
