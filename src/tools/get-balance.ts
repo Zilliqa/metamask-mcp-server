@@ -5,6 +5,7 @@ import { z } from "zod";
 import { JSONStringify } from "../utils/json-stringify";
 import { createBridgeClient } from "../wagmi-config";
 import { formatUnits } from "viem";
+import { getChainInfo } from "../utils/chain-data";
 
 export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): void {
   server.addTool({
@@ -15,47 +16,32 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
     }),
     execute: async (args) => {
       try {
+        console.log("🚀 REQUEST: Getting native currency balance for", args.address);
+        
         // Try bridge first to get accurate balance with correct decimals
         const bridgeClient = createBridgeClient();
         if (bridgeClient) {
           try {
             await bridgeClient.connect();
+            console.log("🔗 BRIDGE: Connected to bridge");
             
             // Get current chain ID from bridge
             const chainIdHex = await bridgeClient.getChainId();
             const chainId = parseInt(chainIdHex, 16);
+            console.log("🔍 DEBUG: Current chain ID:", chainId);
             
             // Get balance via bridge
             const balanceHex = await bridgeClient.request("eth_getBalance", [args.address, "latest"]);
             const balanceWei = BigInt(balanceHex);
+            console.log("🔍 DEBUG: Balance in wei:", balanceWei.toString());
             
-            // Determine correct decimals based on chain
-            // Try to get chain info from MetaMask first
-            let decimals = 18; // Default to Ethereum decimals
-            let symbol = "ETH"; // Default symbol
-            
-            // Known chain configurations (can be extended)
-            const chainConfigs: Record<number, { decimals: number; symbol: string; name: string }> = {
-              1: { decimals: 18, symbol: "ETH", name: "Ethereum Mainnet" },
-              11155111: { decimals: 18, symbol: "ETH", name: "Sepolia" },
-              137: { decimals: 18, symbol: "MATIC", name: "Polygon" },
-              56: { decimals: 18, symbol: "BNB", name: "BNB Smart Chain" },
-              42161: { decimals: 18, symbol: "ETH", name: "Arbitrum One" },
-              10: { decimals: 18, symbol: "ETH", name: "Optimism" },
-              250: { decimals: 18, symbol: "FTM", name: "Fantom" },
-              43114: { decimals: 18, symbol: "AVAX", name: "Avalanche" },
-              33101: { decimals: 12, symbol: "ZIL", name: "Zilliqa Testnet" },
-              // Note: Zilliqa Mainnet uses chain ID 1, same as Ethereum, but different network
-            };
-            
-            const config = chainConfigs[chainId];
-            if (config) {
-              decimals = config.decimals;
-              symbol = config.symbol;
-            }
+            // Get chain information dynamically from ChainList
+            console.log("📡 NETWORK: Fetching chain info from ChainList...");
+            const chainInfo = await getChainInfo(chainId);
             
             // Format balance with correct decimals
-            const formattedBalance = formatUnits(balanceWei, decimals);
+            const formattedBalance = formatUnits(balanceWei, chainInfo.decimals);
+            console.log("🔄 CONVERSION: Formatted balance:", formattedBalance, chainInfo.symbol);
             
             bridgeClient.disconnect();
             
@@ -67,15 +53,17 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
                     address: args.address,
                     balance: formattedBalance,
                     balanceWei: balanceWei.toString(),
-                    decimals: decimals,
+                    decimals: chainInfo.decimals,
                     chainId: chainId,
-                    symbol: symbol
+                    symbol: chainInfo.symbol,
+                    chainName: chainInfo.name,
+                    source: "bridge"
                   }),
                 },
               ],
             };
           } catch (error) {
-            console.warn("Bridge request failed, falling back to wagmi:", error);
+            console.warn("❌ ERROR: Bridge request failed, falling back to wagmi:", error);
             if (bridgeClient) {
               bridgeClient.disconnect();
             }
@@ -83,12 +71,28 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
         }
 
         // Fallback to wagmi
+        console.log("🔄 FALLBACK: Using wagmi for balance retrieval");
         const result = await getBalance(wagmiConfig, args);
+        
+        // Try to get chain info for wagmi result too
+        let chainInfo = { decimals: 18, symbol: "ETH", name: "Unknown Chain" };
+        try {
+          // Get chain ID from wagmi config
+          const chainId = wagmiConfig.chains[0]?.id || 1; // Default to mainnet
+          chainInfo = await getChainInfo(chainId);
+        } catch (error) {
+          console.warn("Could not get chain info for wagmi fallback:", error);
+        }
+        
         return {
           content: [
             {
               type: "text",
-              text: JSONStringify(result),
+              text: JSONStringify({
+                ...result,
+                chainInfo: chainInfo,
+                source: "wagmi"
+              }),
             },
           ],
         };
@@ -116,15 +120,19 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
     }),
     execute: async (args) => {
       try {
+        console.log("🚀 REQUEST: Getting token balance for", args.address, "token:", args.token);
+        
         // Try bridge first to get accurate balance with correct decimals
         const bridgeClient = createBridgeClient();
         if (bridgeClient) {
           try {
             await bridgeClient.connect();
+            console.log("🔗 BRIDGE: Connected to bridge");
             
             // Get current chain ID from bridge
             const chainIdHex = await bridgeClient.getChainId();
             const chainId = parseInt(chainIdHex, 16);
+            console.log("🔍 DEBUG: Current chain ID:", chainId);
             
             // For ERC-20 tokens, we need to call the contract's balanceOf function
             // This is a simplified version - in practice you'd need proper ABI encoding
@@ -134,16 +142,15 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
             }, "latest"]);
             
             const balanceWei = BigInt(balanceHex);
+            console.log("🔍 DEBUG: Token balance in wei:", balanceWei.toString());
             
-            // Determine correct decimals based on chain
-            let decimals = 18; // Default to Ethereum decimals
-            if (chainId === 33101 || chainId === 1) {
-              // Zilliqa chains use 12 decimals
-              decimals = 12;
-            }
+            // Get chain information dynamically from ChainList
+            console.log("📡 NETWORK: Fetching chain info from ChainList...");
+            const chainInfo = await getChainInfo(chainId);
             
-            // Format balance with correct decimals
-            const formattedBalance = formatUnits(balanceWei, decimals);
+            // Format balance with correct decimals (tokens typically use 18 decimals)
+            const formattedBalance = formatUnits(balanceWei, chainInfo.decimals);
+            console.log("🔄 CONVERSION: Formatted token balance:", formattedBalance);
             
             bridgeClient.disconnect();
             
@@ -156,15 +163,17 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
                     token: args.token,
                     balance: formattedBalance,
                     balanceWei: balanceWei.toString(),
-                    decimals: decimals,
+                    decimals: chainInfo.decimals,
                     chainId: chainId,
-                    symbol: symbol
+                    symbol: chainInfo.symbol,
+                    chainName: chainInfo.name,
+                    source: "bridge"
                   }),
                 },
               ],
             };
           } catch (error) {
-            console.warn("Bridge request failed, falling back to wagmi:", error);
+            console.warn("❌ ERROR: Bridge request failed, falling back to wagmi:", error);
             if (bridgeClient) {
               bridgeClient.disconnect();
             }
@@ -172,12 +181,28 @@ export function registerGetBalanceTools(server: FastMCP, wagmiConfig: Config): v
         }
 
         // Fallback to wagmi
+        console.log("🔄 FALLBACK: Using wagmi for token balance retrieval");
         const result = await getBalance(wagmiConfig, args);
+        
+        // Try to get chain info for wagmi result too
+        let chainInfo = { decimals: 18, symbol: "ETH", name: "Unknown Chain" };
+        try {
+          // Get chain ID from wagmi config
+          const chainId = wagmiConfig.chains[0]?.id || 1; // Default to mainnet
+          chainInfo = await getChainInfo(chainId);
+        } catch (error) {
+          console.warn("Could not get chain info for wagmi fallback:", error);
+        }
+        
         return {
           content: [
             {
               type: "text",
-              text: JSONStringify(result),
+              text: JSONStringify({
+                ...result,
+                chainInfo: chainInfo,
+                source: "wagmi"
+              }),
             },
           ],
         };

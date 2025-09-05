@@ -1,0 +1,416 @@
+# MetaMask MCP Project Rules
+
+## Project Overview
+This is a Model Context Protocol (MCP) server that provides MetaMask integration for AI models like Claude and Gemini. It enables AI assistants to interact with blockchain networks through MetaMask using a secure WebSocket bridge.
+
+### Technical Stack
+- **Runtime**: Node.js 18+ with ES modules
+- **Language**: TypeScript 5.7+ with strict mode
+- **Framework**: FastMCP for MCP server implementation
+- **Blockchain**: wagmi v2.16+ with viem v2.27+ for Ethereum interactions
+- **WebSocket**: ws v8.18+ for bridge communication
+- **Validation**: Zod v3.24+ for schema validation
+- **Build**: tsup v8.4+ for bundling
+- **Package Manager**: pnpm for dependency management
+
+## Architecture Principles
+
+### 1. MCP-First Design
+- All tools must follow MCP protocol standards
+- Use FastMCP framework for tool registration
+- Ensure compatibility with both Claude and Gemini
+- Tools must have proper Zod schemas for parameter validation
+
+### 2. Bridge Architecture
+- **Primary**: Secure WebSocket bridge for MetaMask interaction
+- **Fallback**: Direct wagmi integration when bridge unavailable
+- **Protocol**: WebSocket on port 8546 with authentication tokens
+- **Security**: Method allowlisting, nonce-based anti-replay protection
+- **Connection**: `ws://127.0.0.1:8546` with token authentication
+- **Timeout**: 30-second timeout for MetaMask responses
+- **Error Handling**: Graceful fallback to wagmi on bridge failures
+
+### 3. Dynamic Chain Support
+- **Data Source**: ChainList.org API (`https://chainlist.org/rpcs.json`)
+- **Caching**: No persistent caching, fetch on each request
+- **Special Cases**: Only override when ChainList data is demonstrably wrong
+- **Fallback**: Default to 18 decimals, ETH symbol for unknown chains
+- **Validation**: Verify chain ID format and decimal ranges (1-30)
+- **Error Handling**: Graceful degradation with sensible defaults
+
+## Code Standards
+
+### 1. TypeScript Requirements
+- **Strict Mode**: Enable all strict TypeScript flags
+- **Type Imports**: Use `import type` for type-only imports
+- **Runtime Validation**: Zod schemas for all external inputs
+- **Gemini Compatibility**: Avoid complex Zod types (`Address`, `Abi`, `Calldata`)
+- **Type Safety**: No `any` types except for bridge client parameters
+- **Interface Definitions**: Use interfaces for complex objects
+- **Generic Constraints**: Proper generic type constraints where needed
+
+### 2. Error Handling
+- **Async Wrapping**: All async operations in try-catch blocks
+- **Error Types**: Distinguish between `TransactionExecutionError` and generic errors
+- **Context Logging**: Include operation context, parameters, and timestamps
+- **Fallback Strategy**: Bridge → wagmi → error response
+- **Error Propagation**: Don't swallow errors, always provide meaningful messages
+- **Stack Traces**: Log full stack traces for debugging, sanitize for user responses
+
+### 3. Logging Standards
+- **Format**: Structured JSON using `JSONStringify()` utility
+- **Timestamps**: ISO 8601 format (`new Date().toISOString()`)
+- **Log Levels**: Use emoji prefixes for visual categorization
+- **Categories**:
+  - 🚀 **REQUEST**: Initial tool requests with parameters
+  - 🔗 **BRIDGE**: WebSocket bridge operations and responses
+  - 🔄 **CONVERSION**: Value conversions (wei, hex, decimals)
+  - ✅ **SUCCESS**: Successful operations with results
+  - ❌ **ERROR**: Error conditions with context
+  - 🔍 **DEBUG**: Debug information and chain data
+  - 📡 **NETWORK**: ChainList API calls and responses
+  - 🔧 **SPECIAL**: Special case handling and overrides
+
+### 4. Value Conversion
+- **Input Format**: Human-readable values with optional symbols ("100 ZIL", "1.5 ETH")
+- **Parsing**: Extract numeric value using regex `/[^\d.-]/g`
+- **Decimal Lookup**: Dynamic fetch from ChainList.org API
+- **Wei Conversion**: Use `parseUnits(value, decimals)` from viem
+- **Hex Format**: Convert to `0x${weiValue.toString(16)}` for transactions
+- **Validation**: Verify numeric values are valid and within reasonable ranges
+- **Error Handling**: Clear error messages for invalid formats or conversion failures
+
+## Tool Development Rules
+
+### 1. Tool Structure
+```typescript
+export function registerToolName(server: FastMCP, wagmiConfig: Config): void {
+  server.addTool({
+    name: "tool-name",
+    description: "Clear description of what the tool does.",
+    parameters: z.object({
+      param: z.string().describe("Clear parameter description"),
+    }),
+    execute: async (args) => {
+      try {
+        // Try bridge first
+        const bridgeClient = createBridgeClient();
+        if (bridgeClient) {
+          // Bridge implementation
+        }
+        
+        // Fallback to wagmi
+        // wagmi implementation
+      } catch (error) {
+        // Error handling
+      }
+    },
+  });
+}
+```
+
+### 2. Parameter Schemas
+- **Address Fields**: `z.string().describe("Ethereum address (0x... format)")`
+- **Hash Fields**: `z.string().describe("Transaction hash (0x... format)")`
+- **Data Fields**: `z.string().describe("Hex data (0x... format)")`
+- **Numeric IDs**: `z.coerce.number().describe("Chain ID or block number")`
+- **Optional Fields**: `z.string().optional().describe("Optional parameter")`
+- **Value Fields**: `z.string().describe("Value with unit (e.g., '100 ZIL')")`
+- **ABI Fields**: `z.string().describe("JSON string of contract ABI")`
+- **Array Fields**: `z.string().describe("JSON string array (e.g., '[\"arg1\", \"arg2\"]')")`
+- **Gemini Compatibility**: Avoid `Address`, `Abi`, `Calldata`, `Signature` types
+
+### 3. Bridge Integration
+- **Availability Check**: `const bridgeClient = createBridgeClient(); if (bridgeClient)`
+- **Connection Management**: `await bridgeClient.connect()` and `bridgeClient.disconnect()`
+- **Error Handling**: Try-catch around bridge operations with wagmi fallback
+- **Method Mapping**: Use bridge client methods (`getAccounts`, `sendTransaction`, etc.)
+- **Timeout Handling**: Bridge has 30-second timeout for MetaMask responses
+- **Authentication**: Bridge uses token-based authentication from `bridge-config.json`
+- **WebSocket State**: Check `isBridgeConnected()` before operations
+
+### 4. Response Format
+- Always return MCP-compatible response format
+- Use `JSONStringify()` for structured data
+- Include relevant metadata (timestamps, methods used)
+- Provide clear success/error indicators
+
+## File Organization
+
+### 1. Tool Files
+- Location: `src/tools/`
+- Naming: `kebab-case.ts`
+- Export: `registerToolNameTools(server: FastMCP, wagmiConfig: Config)`
+- Import in: `src/tools/register-tools.ts`
+
+### 2. Utility Files
+- Location: `src/utils/`
+- Naming: `kebab-case.ts`
+- Export utility functions
+- Import where needed
+
+### 3. Configuration Files
+- `src/wagmi-config.ts`: Wagmi and bridge configuration
+- `src/bridge-client.ts`: Bridge client implementation
+- `secure-bridge.js`: WebSocket bridge server
+
+## Security Rules
+
+### 1. Bridge Security
+- **Authentication**: 64-character hex tokens generated on bridge startup
+- **Method Allowlisting**: Only allow specific RPC methods (`eth_*`, `personal_*`, `wallet_*`)
+- **Nonce Protection**: UUID-based nonces for anti-replay attacks
+- **Request Validation**: Validate all incoming WebSocket messages
+- **Token Storage**: Store tokens in `bridge-config.json` with file permissions
+- **Connection Limits**: Single browser relay per bridge instance
+- **Timeout Protection**: 30-second timeout prevents hanging connections
+
+### 2. Input Validation
+- **Schema Validation**: All parameters validated with Zod schemas
+- **Address Format**: Validate Ethereum address format (`/^0x[a-fA-F0-9]{40}$/`)
+- **Hash Format**: Validate hex hash format (`/^0x[a-fA-F0-9]+$/`)
+- **Chain ID Range**: Validate chain IDs are positive integers (1-2^53-1)
+- **Value Sanitization**: Sanitize numeric values and prevent injection
+- **JSON Parsing**: Safe JSON parsing with error handling for ABI and args
+- **Type Coercion**: Use `z.coerce.number()` for numeric conversions
+
+### 3. Error Information
+- Don't expose sensitive information in errors
+- Log detailed errors server-side
+- Return user-friendly error messages
+- Don't leak private keys or sensitive data
+
+## Testing Rules
+
+### 1. Test Structure
+- Unit tests for individual tools
+- Integration tests for workflows
+- Mock bridge client for testing
+- Test both success and error scenarios
+
+### 2. Test Data
+- Use consistent test addresses
+- Use realistic test values
+- Test different chain configurations
+- Test edge cases and error conditions
+
+## Documentation Rules
+
+### 1. Code Comments
+- Explain complex logic
+- Document parameter purposes
+- Include usage examples
+- Explain error handling
+
+### 2. README Updates
+- Keep setup instructions current
+- Document new tools
+- Update troubleshooting guides
+- Include examples
+
+## Performance Rules
+
+### 1. Async Operations
+- **Async/Await**: Use async/await for all asynchronous operations
+- **Event Loop**: Avoid blocking operations, use `setImmediate()` for heavy tasks
+- **Timeout Handling**: 30-second timeout for bridge operations, 10-second for API calls
+- **Resource Cleanup**: Always disconnect bridge clients and close connections
+- **Error Propagation**: Proper error handling without swallowing exceptions
+- **Concurrent Operations**: Use `Promise.all()` for independent operations
+
+### 2. Caching
+- **Chain Data**: No persistent caching, fetch from ChainList on each request
+- **Bridge State**: No caching of bridge connection state
+- **Token Storage**: Cache authentication tokens in `bridge-config.json`
+- **Memory Management**: Avoid memory leaks with proper cleanup
+- **API Rate Limits**: Respect ChainList.org rate limits (no aggressive polling)
+- **Cache Invalidation**: Clear any temporary caches on errors
+
+## Compatibility Rules
+
+### 1. MCP Compatibility
+- Follow MCP protocol exactly
+- Ensure tool discovery works
+- Support both Claude and Gemini
+- Handle schema validation properly
+
+### 2. Chain Compatibility
+- Support multiple blockchain networks
+- Handle different decimal configurations
+- Support various RPC methods
+- Graceful degradation for unsupported features
+
+## Deployment Rules
+
+### 1. Build Process
+- **Build Command**: `pnpm build` using tsup bundler
+- **TypeScript Compilation**: Strict mode with all type checking enabled
+- **ES Module Output**: Generate ES modules for Node.js compatibility
+- **Source Maps**: Generate source maps for debugging
+- **File Permissions**: Set executable permissions on built files (`chmod 755`)
+- **Linting**: Run `pnpm lint` before deployment
+- **Testing**: Run all tests before release
+
+### 2. Dependencies
+- **Package Manager**: Use pnpm for dependency management
+- **Version Pinning**: Pin critical dependencies (wagmi, viem, fastmcp)
+- **Security Updates**: Regular security updates for all dependencies
+- **Breaking Changes**: Test thoroughly with new major versions
+- **Peer Dependencies**: Ensure compatibility with Node.js 18+
+- **Lock File**: Commit `pnpm-lock.yaml` for reproducible builds
+
+## Maintenance Rules
+
+### 1. Code Updates
+- Update tools when APIs change
+- Keep bridge client current
+- Update chain configurations
+- Maintain backward compatibility
+
+### 2. Monitoring
+- Log all important operations
+- Monitor bridge connectivity
+- Track error rates
+- Alert on critical failures
+
+## Specific Tool Rules
+
+### 1. Send Transaction
+- **Input Format**: Human-readable values ("100 ZIL", "1.5 ETH")
+- **Value Conversion**: Dynamic decimal lookup from ChainList.org
+- **Wei Conversion**: `parseUnits(value, decimals)` from viem
+- **Hex Format**: `0x${weiValue.toString(16)}` for transactions
+- **Bridge Support**: WebSocket bridge with MetaMask integration
+- **Wagmi Fallback**: Direct wagmi integration when bridge unavailable
+- **Gas Parameters**: Support `maxFeePerGas` and `maxPriorityFeePerGas`
+- **Error Handling**: Distinguish between `TransactionExecutionError` and generic errors
+
+### 2. Get Balance
+- **Native Balance**: `eth_getBalance` RPC call via bridge or wagmi
+- **Token Balance**: `eth_call` with ERC-20 `balanceOf` function
+- **Decimal Formatting**: Use `formatUnits(balance, decimals)` from viem
+- **Chain Detection**: Dynamic decimal lookup from ChainList.org
+- **Response Format**: Structured JSON with balance, wei, decimals, symbol
+- **Error Handling**: Graceful fallback for unsupported tokens
+- **Address Validation**: Validate Ethereum address format
+
+### 3. Connect Tools
+- **QR Code**: Generate QR codes for mobile wallet connection
+- **Bridge Connection**: WebSocket bridge for browser extension connection
+- **Account Retrieval**: `eth_requestAccounts` RPC call via bridge
+- **Chain Detection**: `eth_chainId` RPC call for current network
+- **Error Handling**: Clear error messages for connection failures
+- **Status Reporting**: Return connection status and account information
+- **Timeout Handling**: 30-second timeout for MetaMask popup responses
+
+### 4. Chain Management
+- **Dynamic Data**: Fetch chain information from ChainList.org API
+- **Chain Switching**: `wallet_switchEthereumChain` RPC call via bridge
+- **Chain Addition**: `wallet_addEthereumChain` RPC call for new networks
+- **Permission Management**: `wallet_getPermissions` and `wallet_requestPermissions`
+- **Unknown Chains**: Fallback to default values (18 decimals, ETH symbol)
+- **Chain Validation**: Validate chain ID format and decimal ranges
+- **Error Recovery**: Graceful handling of unsupported chains
+
+## Error Recovery Rules
+
+### 1. Bridge Failures
+- Always fallback to wagmi
+- Log bridge errors
+- Continue operation if possible
+- Alert user to connection issues
+
+### 2. Network Errors
+- Retry failed requests
+- Use exponential backoff
+- Provide clear error messages
+- Don't crash on network issues
+
+### 3. Validation Errors
+- Validate inputs early
+- Provide helpful error messages
+- Suggest corrections
+- Don't proceed with invalid data
+
+## Code Quality Rules
+
+### 1. Consistency
+- Use consistent naming conventions
+- Follow established patterns
+- Use similar error handling
+- Maintain code style
+
+### 2. Readability
+- Write clear, self-documenting code
+- Use meaningful variable names
+- Break complex functions into smaller ones
+- Add comments for complex logic
+
+### 3. Maintainability
+- Keep functions focused and small
+- Avoid deep nesting
+- Use early returns
+- Make code easy to modify
+
+## Version Control Rules
+
+### 1. Commits
+- Write clear commit messages
+- Include relevant context
+- Reference issues when applicable
+- Keep commits focused
+
+### 2. Branches
+- Use feature branches for new work
+- Keep main branch stable
+- Test before merging
+- Use pull requests for reviews
+
+## Technical Implementation Details
+
+### 1. WebSocket Bridge Protocol
+- **Connection**: `ws://127.0.0.1:8546` with authentication token
+- **Message Format**: JSON-RPC 2.0 with method, params, id, and nonce
+- **Authentication**: 64-character hex token in `Authorization` header
+- **Method Allowlist**: `eth_*`, `personal_*`, `wallet_*` RPC methods only
+- **Nonce Generation**: UUID v4 for anti-replay protection
+- **Response Timeout**: 30 seconds for MetaMask popup responses
+
+### 2. ChainList.org Integration
+- **API Endpoint**: `https://chainlist.org/rpcs.json`
+- **Data Structure**: Array of chain objects with `chainId`, `nativeCurrency`, `name`
+- **Decimal Extraction**: `chain.nativeCurrency?.decimals || 18`
+- **Symbol Extraction**: `chain.nativeCurrency?.symbol || "ETH"`
+- **Error Handling**: Fallback to default values on API failure
+- **No Caching**: Fresh data on each request to ensure accuracy
+
+### 3. Value Conversion Pipeline
+- **Input**: Human-readable string ("100 ZIL", "1.5 ETH")
+- **Parsing**: Regex extraction `/[^\d.-]/g` to get numeric value
+- **Decimal Lookup**: ChainList.org API call for chain-specific decimals
+- **Wei Conversion**: `parseUnits(numericValue, decimals)` from viem
+- **Hex Format**: `0x${weiValue.toString(16)}` for transaction value
+- **Validation**: Range checking and format validation
+
+### 4. Error Handling Hierarchy
+- **Level 1**: Bridge connection errors → Fallback to wagmi
+- **Level 2**: RPC method errors → Return structured error response
+- **Level 3**: Validation errors → Return user-friendly error message
+- **Level 4**: Network errors → Retry with exponential backoff
+- **Level 5**: Unknown errors → Log and return generic error
+
+### 5. MCP Tool Registration
+- **Function Pattern**: `registerToolNameTools(server: FastMCP, wagmiConfig: Config)`
+- **Schema Definition**: Zod object with string parameters for Gemini compatibility
+- **Execute Function**: Async function with bridge-first, wagmi-fallback pattern
+- **Response Format**: MCP-compatible JSON response with content and metadata
+- **Error Responses**: Structured error responses with error codes and messages
+
+## Final Notes
+
+- Always prioritize user experience
+- Keep the codebase clean and organized
+- Test thoroughly before releasing
+- Document changes and new features
+- Follow these rules consistently
+- Ask for clarification when needed
